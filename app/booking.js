@@ -6,7 +6,9 @@ import {
   ScrollView, 
   TouchableOpacity, 
   TextInput,
-  Alert 
+  Alert,
+  Modal,
+  Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -36,8 +38,143 @@ const mockBookingData = {
   }
 };
 
+// Calendar Component
+const CalendarModal = ({ visible, onClose, onDateSelect, selectedDate }) => {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(day);
+    }
+    
+    return days;
+  };
+  
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  const handleDateSelect = (day) => {
+    if (day) {
+      const selectedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+      onDateSelect(selectedDate);
+      onClose();
+    }
+  };
+  
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+  };
+  
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+  };
+  
+  const formatDate = (date) => {
+    if (!date) return '';
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  };
+  
+  const days = getDaysInMonth(currentMonth);
+  
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={styles.modalOverlay}>
+        <View style={styles.calendarContainer}>
+          <View style={styles.calendarHeader}>
+            <TouchableOpacity onPress={goToPreviousMonth} style={styles.monthButton}>
+              <Text style={styles.monthButtonText}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.monthTitle}>
+              {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+            </Text>
+            <TouchableOpacity onPress={goToNextMonth} style={styles.monthButton}>
+              <Text style={styles.monthButtonText}>›</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.dayNamesRow}>
+            {dayNames.map(day => (
+              <Text key={day} style={styles.dayName}>{day}</Text>
+            ))}
+          </View>
+          
+          <View style={styles.calendarGrid}>
+            {days.map((day, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.calendarDay,
+                  day && selectedDate && 
+                  day === selectedDate.getDate() && 
+                  currentMonth.getMonth() === selectedDate.getMonth() && 
+                  currentMonth.getFullYear() === selectedDate.getFullYear() && 
+                  styles.selectedDay
+                ]}
+                onPress={() => handleDateSelect(day)}
+                disabled={!day}
+              >
+                <Text style={[
+                  styles.dayText,
+                  day && selectedDate && 
+                  day === selectedDate.getDate() && 
+                  currentMonth.getMonth() === selectedDate.getMonth() && 
+                  currentMonth.getFullYear() === selectedDate.getFullYear() && 
+                  styles.selectedDayText
+                ]}>
+                  {day}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          
+          <View style={styles.calendarFooter}>
+            <TouchableOpacity onPress={onClose} style={styles.cancelButton}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 // Passenger Information Form Component
 const PassengerForm = ({ passenger, onUpdate }) => {
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  
+  const handleDateSelect = (date) => {
+    setSelectedDate(date);
+    const formattedDate = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
+    onUpdate('dateOfBirth', formattedDate);
+  };
+  
+  const openCalendar = () => {
+    setShowCalendar(true);
+  };
+  
   return (
     <View style={styles.formSection}>
       <Text style={styles.sectionTitle}>Passenger Information</Text>
@@ -90,14 +227,21 @@ const PassengerForm = ({ passenger, onUpdate }) => {
         
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>Date of Birth</Text>
-          <TextInput
-            style={styles.inputField}
-            value={passenger.dateOfBirth}
-            onChangeText={(text) => onUpdate('dateOfBirth', text)}
-            placeholder="MM/DD/YYYY"
-          />
+          <TouchableOpacity style={styles.dateInputField} onPress={openCalendar}>
+            <Text style={[styles.dateInputText, !passenger.dateOfBirth && styles.placeholderText]}>
+              {passenger.dateOfBirth || 'MM/DD/YYYY'}
+            </Text>
+            <Text style={styles.calendarIcon}>📅</Text>
+          </TouchableOpacity>
         </View>
       </View>
+      
+      <CalendarModal
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+        onDateSelect={handleDateSelect}
+        selectedDate={selectedDate}
+      />
     </View>
   );
 };
@@ -226,29 +370,117 @@ const BookingConfirmationScreen = () => {
   const [currentStep, setCurrentStep] = useState(1); // 1: Passenger, 2: Payment, 3: Confirmation
 
   const updatePassenger = (field, value) => {
+    let formattedValue = value;
+    
+    // Format date of birth
+    if (field === 'dateOfBirth') {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 2) {
+        if (cleaned.length >= 4) {
+          formattedValue = cleaned.substring(0, 2) + '/' + cleaned.substring(2, 4) + '/' + cleaned.substring(4, 8);
+        } else {
+          formattedValue = cleaned.substring(0, 2) + '/' + cleaned.substring(2);
+        }
+      } else {
+        formattedValue = cleaned;
+      }
+    }
+    
     setBookingData(prev => ({
       ...prev,
-      passenger: { ...prev.passenger, [field]: value }
+      passenger: { ...prev.passenger, [field]: formattedValue }
     }));
   };
 
   const updatePayment = (field, value) => {
+    let formattedValue = value;
+    
+    // Format card number with spaces
+    if (field === 'cardNumber') {
+      const cleaned = value.replace(/\s/g, '');
+      const groups = cleaned.match(/.{1,4}/g);
+      formattedValue = groups ? groups.join(' ') : cleaned;
+    }
+    
+    // Format expiry date
+    if (field === 'expiryDate') {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 2) {
+        formattedValue = cleaned.substring(0, 2) + '/' + cleaned.substring(2, 4);
+      } else {
+        formattedValue = cleaned;
+      }
+    }
+    
     setBookingData(prev => ({
       ...prev,
-      payment: { ...prev.payment, [field]: value }
+      payment: { ...prev.payment, [field]: formattedValue }
     }));
   };
 
-  const validateForm = () => {
-    const { passenger, payment } = bookingData;
+  const validatePassengerInfo = () => {
+    const { passenger } = bookingData;
+    const missingFields = [];
     
-    if (!passenger.firstName || !passenger.lastName || !passenger.email || !passenger.phone) {
-      Alert.alert('Error', 'Please fill in all passenger information');
+    if (!passenger.firstName?.trim()) missingFields.push('First Name');
+    if (!passenger.lastName?.trim()) missingFields.push('Last Name');
+    if (!passenger.email?.trim()) missingFields.push('Email Address');
+    if (!passenger.phone?.trim()) missingFields.push('Phone Number');
+    if (!passenger.dateOfBirth?.trim()) missingFields.push('Date of Birth');
+    
+    if (missingFields.length > 0) {
+      Alert.alert('Missing Information', `Please fill in the following fields:\n• ${missingFields.join('\n• ')}`);
       return false;
     }
     
-    if (!payment.cardNumber || !payment.expiryDate || !payment.cvv || !payment.cardholderName) {
-      Alert.alert('Error', 'Please fill in all payment information');
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(passenger.email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return false;
+    }
+    
+    // Validate date format (MM/DD/YYYY)
+    const dateRegex = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/\d{4}$/;
+    if (!dateRegex.test(passenger.dateOfBirth)) {
+      Alert.alert('Invalid Date', 'Please enter date of birth in MM/DD/YYYY format');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const validatePaymentInfo = () => {
+    const { payment } = bookingData;
+    const missingFields = [];
+    
+    if (!payment.cardNumber?.trim()) missingFields.push('Card Number');
+    if (!payment.expiryDate?.trim()) missingFields.push('Expiry Date');
+    if (!payment.cvv?.trim()) missingFields.push('CVV');
+    if (!payment.cardholderName?.trim()) missingFields.push('Cardholder Name');
+    
+    if (missingFields.length > 0) {
+      Alert.alert('Missing Information', `Please fill in the following fields:\n• ${missingFields.join('\n• ')}`);
+      return false;
+    }
+    
+    // Validate card number (basic check for 16 digits)
+    const cardNumber = payment.cardNumber.replace(/\s/g, '');
+    if (!/^\d{16}$/.test(cardNumber)) {
+      Alert.alert('Invalid Card Number', 'Please enter a valid 16-digit card number');
+      return false;
+    }
+    
+    // Validate expiry date format (MM/YY)
+    const expiryRegex = /^(0[1-9]|1[0-2])\/\d{2}$/;
+    if (!expiryRegex.test(payment.expiryDate)) {
+      Alert.alert('Invalid Expiry Date', 'Please enter expiry date in MM/YY format');
+      return false;
+    }
+    
+    // Validate CVV (3-4 digits)
+    if (!/^\d{3,4}$/.test(payment.cvv)) {
+      Alert.alert('Invalid CVV', 'Please enter a valid CVV (3-4 digits)');
       return false;
     }
     
@@ -257,11 +489,11 @@ const BookingConfirmationScreen = () => {
 
   const handleNextStep = () => {
     if (currentStep === 1) {
-      if (validateForm()) {
+      if (validatePassengerInfo()) {
         setCurrentStep(2);
       }
     } else if (currentStep === 2) {
-      if (validateForm()) {
+      if (validatePaymentInfo()) {
         setCurrentStep(3);
       }
     }
@@ -646,6 +878,121 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Calendar Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: Dimensions.get('window').width - 40,
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  monthButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#374151',
+  },
+  monthTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  dayNamesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
+  dayName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+    width: 40,
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+  },
+  calendarDay: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderRadius: 20,
+  },
+  selectedDay: {
+    backgroundColor: '#2563eb',
+  },
+  dayText: {
+    fontSize: 16,
+    color: '#374151',
+  },
+  selectedDayText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  calendarFooter: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  // Date Input Styles
+  dateInputField: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateInputText: {
+    fontSize: 16,
+    color: '#374151',
+  },
+  placeholderText: {
+    color: '#9ca3af',
+  },
+  calendarIcon: {
+    fontSize: 18,
   },
 });
 
